@@ -1,0 +1,13 @@
+{
+  "name": "superwagyu-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:backend": "npm --prefix apps/backend run dev",
+    "test": "npm --prefix apps/backend run test",
+    "dev:mobile": "npm --prefix apps/mobile run start"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

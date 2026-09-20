@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Lazada Restock Monitor",
+    "slug": "lazada-restock-monitor",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#111827"
+    },
+    "ios": {
+      "supportsTablet": true
+    }
+  }
+}

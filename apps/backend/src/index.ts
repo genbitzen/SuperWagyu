@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import http from 'http';
 import { MockLazadaProvider } from './providers/mockProvider.js';
-import { LazadaHttpProvider } from './providers/httpProvider.js';
+import { RealLazadaProvider } from './providers/realLazadaProvider.js';
 import { InMemoryDatabaseRepository, SupabaseDatabaseRepository, IDatabaseRepository } from './repository/db.js';
 import { MonitoringWorker } from './services/monitoringWorker.js';
 
@@ -14,7 +14,7 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABAS
 
 // Provider setup
 const mockProvider = new MockLazadaProvider(false);
-const provider = useMock ? mockProvider : new LazadaHttpProvider();
+const provider = useMock ? mockProvider : new RealLazadaProvider();
 
 // DB Repository setup
 const db: IDatabaseRepository = (supabaseUrl.includes('mock.supabase.co') || !supabaseUrl)

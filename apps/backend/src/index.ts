@@ -1,11 +1,16 @@
 import dotenv from 'dotenv';
 import http from 'http';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { MockLazadaProvider } from './providers/mockProvider.js';
 import { RealLazadaProvider } from './providers/realLazadaProvider.js';
 import { InMemoryDatabaseRepository, SupabaseDatabaseRepository, IDatabaseRepository } from './repository/db.js';
 import { MonitoringWorker } from './services/monitoringWorker.js';
 
-dotenv.config();
+// Resolve .env from monorepo root: apps/backend/src/ -> apps/backend/ -> apps/ -> root (3 levels)
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const envPath = path.resolve(__dirname, '..', '..', '..', '.env');
+dotenv.config({ path: envPath });
 
 const useMock = process.env.USE_MOCK_PROVIDER !== 'false';
 const pollIntervalMs = parseInt(process.env.POLL_INTERVAL_MS || '3000', 10);
@@ -25,7 +30,7 @@ const db: IDatabaseRepository = (supabaseUrl.includes('mock.supabase.co') || !su
 async function seedInitialData() {
   const products = await db.getMonitoredProducts();
   if (products.length === 0) {
-    const sampleProduct = await db.addProduct('https://www.lazada.sg/products/sample-restock-item.html', 'sample-prod-001');
+    const sampleProduct = await db.addProduct('https://www.lazada.sg/products/pokmon-center-original-plush-deck-case-pikachu-i13822368851.html', 'sample-prod-001');
     mockProvider.setProductAvailability(sampleProduct.url, false, 'OUT_OF_STOCK');
     console.log(`[Seed] Seeded sample product: ${sampleProduct.url} (ID: ${sampleProduct.id})`);
   }

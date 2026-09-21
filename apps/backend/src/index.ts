@@ -6,6 +6,8 @@ import { MockLazadaProvider } from './providers/mockProvider.js';
 import { RealLazadaProvider } from './providers/realLazadaProvider.js';
 import { InMemoryDatabaseRepository, SupabaseDatabaseRepository, IDatabaseRepository } from './repository/db.js';
 import { MonitoringWorker } from './services/monitoringWorker.js';
+import { InMemorySessionStore } from './services/sessionStore.js';
+import { MockAutoReservationService } from './services/reservationService.js';
 
 // Resolve .env from monorepo root: apps/backend/src/ -> apps/backend/ -> apps/ -> root (3 levels)
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -21,10 +23,13 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABAS
 const mockProvider = new MockLazadaProvider(false);
 const provider = useMock ? mockProvider : new RealLazadaProvider();
 
-// DB Repository setup
+// DB Repository & Session Store setup
 const db: IDatabaseRepository = (supabaseUrl.includes('mock.supabase.co') || !supabaseUrl)
   ? new InMemoryDatabaseRepository()
   : new SupabaseDatabaseRepository(supabaseUrl, supabaseKey);
+
+const sessionStore = new InMemorySessionStore();
+const reservationService = new MockAutoReservationService(false);
 
 // Seed sample product for local testing if empty
 async function seedInitialData() {
@@ -39,6 +44,7 @@ async function seedInitialData() {
 const worker = new MonitoringWorker({
   provider,
   db,
+  reservationService,
   pollIntervalMs
 });
 
@@ -65,6 +71,20 @@ const server = http.createServer(async (req, res) => {
       const products = await db.getMonitoredProducts();
       res.writeHead(200);
       res.end(JSON.stringify(products));
+      return;
+    }
+
+    if (req.method === 'GET' && path === '/api/session/status') {
+      const status = await sessionStore.getSessionStatus();
+      res.writeHead(200);
+      res.end(JSON.stringify(status));
+      return;
+    }
+
+    if (req.method === 'POST' && path === '/api/session/login') {
+      const status = await sessionStore.saveSession({ cookies: { 'lzd_session': 'active_token' } });
+      res.writeHead(200);
+      res.end(JSON.stringify(status));
       return;
     }
 

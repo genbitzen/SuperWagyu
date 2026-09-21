@@ -10,7 +10,8 @@ import {
   StatusBar,
   Alert,
   ActivityIndicator,
-  RefreshControl
+  RefreshControl,
+  Linking
 } from 'react-native';
 
 const API_BASE_URL = 'http://localhost:3001';
@@ -23,9 +24,37 @@ interface MonitoredProduct {
   last_checked_at?: string | null;
 }
 
+interface ReservationResult {
+  id: string;
+  product_id: string;
+  product_url: string;
+  order_id: string;
+  status: 'RESERVED' | 'FAILED' | 'EXPIRED' | 'PAID';
+  reserved_at: string;
+  expires_at: string;
+}
+
+interface AvailabilityEvent {
+  id: string;
+  product_id: string;
+  previous_state: string;
+  new_state: string;
+  detected_at: string;
+  reservation?: ReservationResult | null;
+}
+
+interface SessionStatus {
+  is_valid: boolean;
+  user_id?: string;
+  last_authenticated_at?: string;
+  provider: string;
+}
+
 export default function App() {
   const [url, setUrl] = useState('');
   const [products, setProducts] = useState<MonitoredProduct[]>([]);
+  const [events, setEvents] = useState<AvailabilityEvent[]>([]);
+  const [session, setSession] = useState<SessionStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -41,9 +70,38 @@ export default function App() {
     }
   };
 
+  const fetchEvents = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/events`);
+      if (response.ok) {
+        const data = await response.json();
+        setEvents(data);
+      }
+    } catch (err) {
+      console.log('Error fetching events:', err);
+    }
+  };
+
+  const fetchSessionStatus = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/session/status`);
+      if (response.ok) {
+        const data = await response.json();
+        setSession(data);
+      }
+    } catch (err) {
+      console.log('Error fetching session status:', err);
+    }
+  };
+
   useEffect(() => {
     fetchProducts();
-    const interval = setInterval(fetchProducts, 2000);
+    fetchEvents();
+    fetchSessionStatus();
+    const interval = setInterval(() => {
+      fetchProducts();
+      fetchEvents();
+    }, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -97,14 +155,31 @@ export default function App() {
         body: JSON.stringify({ id, url: productUrl })
       });
       if (response.ok) {
-        const res = await response.json();
-        Alert.alert('Mock Restock', res.message);
-        fetchProducts();
+        await fetchProducts();
+        await fetchEvents();
       }
     } catch (err) {
-      Alert.alert('Error', 'Failed to trigger mock restock');
+      Alert.alert('Error', 'Failed to simulate restock');
     }
   };
+
+  const handleOpenLazadaOrders = async () => {
+    const lazadaAppUrl = 'lazada://account/orders';
+    const lazadaWebUrl = 'https://member.lazada.sg/user/order/list';
+
+    try {
+      const canOpen = await Linking.canOpenURL(lazadaAppUrl);
+      if (canOpen) {
+        await Linking.openURL(lazadaAppUrl);
+      } else {
+        await Linking.openURL(lazadaWebUrl);
+      }
+    } catch (err) {
+      Linking.openURL(lazadaWebUrl);
+    }
+  };
+
+  const recentReservations = events.filter((e) => e.reservation && e.reservation.status === 'RESERVED');
 
   const renderProductItem = ({ item }: { item: MonitoredProduct }) => {
     const isAvailable = item.last_availability === 'IN_STOCK';
@@ -181,9 +256,33 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
       <View style={styles.header}>
-        <Text style={styles.title}>Lazada Restock Monitor</Text>
-        <Text style={styles.subtitle}>V0 — Monitoring Foundation</Text>
+        <View style={styles.headerTitleRow}>
+          <Text style={styles.title}>SuperWagyu</Text>
+          <View style={[styles.sessionBadge, session?.is_valid ? styles.sessionValid : styles.sessionInvalid]}>
+            <Text style={styles.sessionBadgeText}>
+              {session?.is_valid ? '⚡ Auto-Reserve Active' : '⚠️ Session Expired'}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.subtitle}>Lazada Automated Restock & Reserve</Text>
       </View>
+
+      {recentReservations.length > 0 && (
+        <View style={styles.reservationBanner}>
+          <Text style={styles.reservationTitle}>🎉 Active Stock Reservations</Text>
+          {recentReservations.map((event) => (
+            <View key={event.id} style={styles.reservationItem}>
+              <View style={styles.reservationDetails}>
+                <Text style={styles.reservationOrderText}>Order #{event.reservation?.order_id}</Text>
+                <Text style={styles.reservationNotice}>Status: RESERVED (Pay in Lazada)</Text>
+              </View>
+              <TouchableOpacity style={styles.payButton} onPress={handleOpenLazadaOrders}>
+                <Text style={styles.payButtonText}>Open Lazada to Pay ➔</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
 
       <View style={styles.formContainer}>
         <TextInput
@@ -240,15 +339,83 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 10
   },
+  headerTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
   title: {
     fontSize: 24,
     fontWeight: '700',
     color: '#F8FAFC'
   },
+  sessionBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12
+  },
+  sessionValid: {
+    backgroundColor: 'rgba(16, 185, 129, 0.2)'
+  },
+  sessionInvalid: {
+    backgroundColor: 'rgba(239, 68, 68, 0.2)'
+  },
+  sessionBadgeText: {
+    color: '#34D399',
+    fontSize: 12,
+    fontWeight: '600'
+  },
   subtitle: {
     fontSize: 14,
     color: '#94A3B8',
     marginTop: 4
+  },
+  reservationBanner: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    backgroundColor: '#1E1B4B',
+    borderColor: '#6366F1',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14
+  },
+  reservationTitle: {
+    color: '#A5B4FC',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 8
+  },
+  reservationItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#312E81',
+    padding: 10,
+    borderRadius: 8
+  },
+  reservationDetails: {
+    flex: 1
+  },
+  reservationOrderText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13
+  },
+  reservationNotice: {
+    color: '#C7D2FE',
+    fontSize: 11,
+    marginTop: 2
+  },
+  payButton: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6
+  },
+  payButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 12
   },
   formContainer: {
     flexDirection: 'row',

@@ -2,23 +2,27 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { MonitoringWorker } from '../services/monitoringWorker.js';
 import { MockLazadaProvider } from '../providers/mockProvider.js';
 import { InMemoryDatabaseRepository } from '../repository/db.js';
+import { MockAutoReservationService } from '../services/reservationService.js';
 
 describe('Monitoring Worker State Transition Integration', () => {
   let db: InMemoryDatabaseRepository;
   let mockProvider: MockLazadaProvider;
+  let reservationService: MockAutoReservationService;
   let worker: MonitoringWorker;
 
   beforeEach(() => {
     db = new InMemoryDatabaseRepository();
     mockProvider = new MockLazadaProvider(false); // Default to OUT_OF_STOCK
+    reservationService = new MockAutoReservationService(false);
     worker = new MonitoringWorker({
       provider: mockProvider,
       db,
+      reservationService,
       pollIntervalMs: 100
     });
   });
 
-  it('detects OUT_OF_STOCK -> IN_STOCK transition and generates AvailabilityEvent', async () => {
+  it('detects OUT_OF_STOCK -> IN_STOCK transition and generates AvailabilityEvent with Auto-Reservation', async () => {
     const product = await db.addProduct('https://www.lazada.sg/products/test-item.html');
 
     // 1. Initial check: item is OUT_OF_STOCK
@@ -35,7 +39,7 @@ describe('Monitoring Worker State Transition Integration', () => {
     const refreshedProduct = (await db.getProductById(product.id))!;
     expect(refreshedProduct.last_availability).toBe('OUT_OF_STOCK');
 
-    // 2. Restock occurs: item becomes IN_STOCK
+    // 2. Restock occurs: item becomes IN_STOCK -> triggers auto-reservation
     mockProvider.setProductAvailability(product.url, true, 'IN_STOCK');
     const restockCheck = await worker.checkProduct(refreshedProduct);
 
@@ -46,6 +50,9 @@ describe('Monitoring Worker State Transition Integration', () => {
     expect(events.length).toBe(1);
     expect(events[0].previous_state).toBe('OUT_OF_STOCK');
     expect(events[0].new_state).toBe('IN_STOCK');
+    expect(events[0].reservation).toBeDefined();
+    expect(events[0].reservation?.status).toBe('RESERVED');
+    expect(events[0].reservation?.order_id).toContain('LZ-SG-');
   });
 
   it('does NOT generate duplicate events for consecutive IN_STOCK checks', async () => {

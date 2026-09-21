@@ -14,6 +14,25 @@ export interface MonitoredProduct {
   updated_at: string;
 }
 
+export interface ReservationResult {
+  id: string;
+  product_id: string;
+  product_url: string;
+  order_id: string;
+  status: 'RESERVED' | 'FAILED' | 'EXPIRED' | 'PAID';
+  reserved_at: string;
+  expires_at: string; // 15-minute Lazada payment deadline
+  error?: string;
+}
+
+export interface SessionStatus {
+  is_valid: boolean;
+  user_id?: string;
+  last_authenticated_at?: string;
+  expires_at?: string;
+  provider: string;
+}
+
 export interface AvailabilityEvent {
   id: string;
   product_id: string;
@@ -22,7 +41,9 @@ export interface AvailabilityEvent {
   detected_at: string;
   detection_latency_ms?: number | null;
   raw_details?: Record<string, any> | null;
+  reservation?: ReservationResult | null;
 }
+
 
 export interface LazadaCheckResult {
   productId?: string;

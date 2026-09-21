@@ -2,16 +2,19 @@ import { ILazadaProvider } from '../providers/types.js';
 import { IDatabaseRepository } from '../repository/db.js';
 import { normalizeAvailability, isRestockTransition } from './normalizer.js';
 import { MonitoredProduct, AvailabilityEvent } from '../types.js';
+import { IAutoReservationService } from './reservationService.js';
 
 export interface MonitoringWorkerOptions {
   provider: ILazadaProvider;
   db: IDatabaseRepository;
+  reservationService?: IAutoReservationService;
   pollIntervalMs?: number;
 }
 
 export class MonitoringWorker {
   private provider: ILazadaProvider;
   private db: IDatabaseRepository;
+  private reservationService?: IAutoReservationService;
   private pollIntervalMs: number;
   private isRunning: boolean = false;
   private timer: NodeJS.Timeout | null = null;
@@ -19,6 +22,7 @@ export class MonitoringWorker {
   constructor(options: MonitoringWorkerOptions) {
     this.provider = options.provider;
     this.db = options.db;
+    this.reservationService = options.reservationService;
     this.pollIntervalMs = options.pollIntervalMs || 3000;
   }
 
@@ -38,6 +42,12 @@ export class MonitoringWorker {
     let event: AvailabilityEvent | undefined;
 
     if (restockDetected) {
+      let reservationResult = null;
+      if (this.reservationService) {
+        console.log(`[MonitoringWorker] RESTOCK DETECTED for product ${product.id}! Triggering Auto-Reservation...`);
+        reservationResult = await this.reservationService.reserveProduct(product);
+      }
+
       event = await this.db.recordAvailabilityEvent({
         product_id: product.id,
         previous_state: previousState,
@@ -47,7 +57,8 @@ export class MonitoringWorker {
           provider: this.provider.name,
           checkDurationMs: result.checkDurationMs,
           rawStatus: result.rawStatus
-        }
+        },
+        reservation: reservationResult
       });
     }
 
